@@ -1,0 +1,47 @@
+{
+	"name": "pi-verbosity",
+	"version": "0.1.0",
+	"description": "Transcript verbosity levels for pi: minimal, normal and verbose, with a /verbosity command.",
+	"type": "module",
+	"keywords": [
+		"pi-package",
+		"pi",
+		"pi-extension",
+		"verbosity",
+		"transcript",
+		"tool-output",
+		"tui"
+	],
+	"license": "MIT",
+	"author": "Rares Felix Tudose",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/felixtudose/pi-verbosity.git"
+	},
+	"exports": {
+		".": "./index.ts"
+	},
+	"pi": {
+		"extensions": [
+			"./index.ts"
+		]
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*",
+		"@earendil-works/pi-tui": "*"
+	},
+	"devDependencies": {
+		"@types/node": "^22.0.0",
+		"typescript": "^5.0.0"
+	},
+	"scripts": {
+		"test": "node --test test/*.test.ts",
+		"typecheck": "tsc --noEmit"
+	},
+	"files": [
+		"index.ts",
+		"src",
+		"README.md",
+		"LICENSE"
+	]
+}
