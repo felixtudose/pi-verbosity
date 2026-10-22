@@ -87,17 +87,18 @@ test("an unsettled call marks the group as running and hides the total", () => {
 	assert.equal(stats.durationMs, undefined);
 });
 
-test("prepareGroups splits history by assistant message and marks it settled", () => {
+test("prepareGroups merges tool-only messages into one group and marks them settled", () => {
 	resetGroups();
 	prepareGroups([
 		{ role: "user", content: [{ type: "text", text: "go" }] },
+		{ role: "assistant", content: [] },
 		assistant({ id: "a", name: "bash" }, { id: "b", name: "read" }),
 		{ role: "toolResult", content: [] },
 		assistant({ id: "c", name: "bash" }),
 	]);
 	assert.equal(groupFor("a"), groupFor("b"));
-	assert.notEqual(groupFor("a"), groupFor("c"));
-	assert.equal(isLastInGroup("b"), true);
+	assert.equal(groupFor("a"), groupFor("c"));
+	assert.equal(isLastInGroup("b"), false);
 	assert.equal(isLastInGroup("c"), true);
 	assert.equal(entryFor("a")?.settled, true);
 	assert.equal(groupStats(groupFor("a")!).durationMs, undefined);
@@ -105,8 +106,26 @@ test("prepareGroups splits history by assistant message and marks it settled", (
 
 test("a text-only assistant message starts the next group", () => {
 	resetGroups();
-	prepareGroups([assistant({ id: "a", name: "bash" }), assistant(), assistant({ id: "b", name: "read" })]);
+	const prose = { role: "assistant", content: [{ type: "text", text: "next I will read" }] };
+	prepareGroups([assistant({ id: "a", name: "bash" }), prose, assistant({ id: "b", name: "read" })]);
 	assert.notEqual(groupFor("a"), groupFor("b"));
+});
+
+test("a new user message starts the next group", () => {
+	resetGroups();
+	prepareGroups([
+		assistant({ id: "a", name: "bash" }),
+		{ role: "user", content: [{ type: "text", text: "again" }] },
+		assistant({ id: "b", name: "bash" }),
+	]);
+	assert.notEqual(groupFor("a"), groupFor("b"));
+});
+
+test("tool-only assistant messages keep joining until prose or a user message", () => {
+	resetGroups();
+	const noText = { role: "assistant", content: [{ type: "text", text: "   " }] };
+	prepareGroups([assistant({ id: "a", name: "bash" }), noText, assistant({ id: "b", name: "read" })]);
+	assert.equal(groupFor("a"), groupFor("b"));
 });
 
 test("live calls after history join the last history group", () => {

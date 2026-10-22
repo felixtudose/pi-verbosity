@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { openGroup, prepareGroups, type HistoryMessage } from "./src/groups.ts";
+import { openGroup, prepareGroups, startsGroup, type HistoryMessage } from "./src/groups.ts";
 import {
 	LEVELS,
 	LEVEL_DESCRIPTIONS,
@@ -27,10 +27,11 @@ export default function (pi: ExtensionAPI) {
 		await enforceThinkingLevel(ctx);
 	});
 
-	// A new assistant message ends the previous run of tool calls, so the next call
-	// starts a fresh group even when the model interleaves text and tools.
+	// A user message or a message with prose ends the previous run of tool calls, so
+	// the next call starts a fresh group. Tool-only assistant messages continue the
+	// current group, which is what folds a long run of sequential calls into one line.
 	pi.on("message_start", (event) => {
-		if (event.message.role === "assistant") openGroup();
+		if (startsGroup(event.message as HistoryMessage)) openGroup();
 	});
 
 	pi.registerCommand("verbosity", {

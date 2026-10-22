@@ -51,7 +51,11 @@ export function summarizeArgs(args: unknown): string {
 		const value = record[key];
 		if (typeof value === "string" && value !== "") return firstLine(value);
 	}
+	// Streaming rows see an empty object before the arguments arrive; showing "{}"
+	// on every such row is noise, so keep the line to the tool name until there is
+	// something to say.
 	const json = JSON.stringify(record);
+	if (json === "{}") return "";
 	return json.length > MAX_ARGUMENT_WIDTH ? `${json.slice(0, MAX_ARGUMENT_WIDTH)}…` : json;
 }
 

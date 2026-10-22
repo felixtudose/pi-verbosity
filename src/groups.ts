@@ -3,9 +3,10 @@
  * line in minimal mode. Each row asks this registry whether it is the last member of
  * its group: earlier rows render with zero height, the last one draws the summary.
  *
- * Groups are split per assistant message, so text between calls starts a new group.
- * History is registered up front from the session branch, because restored rows are
- * rendered without replaying the events that split groups live.
+ * A run of tool calls with no prose in between is one group, even when pi splits it
+ * across several assistant messages: a user message or assistant text starts the
+ * next group. History is registered up front from the session branch, because
+ * restored rows are rendered without replaying the events that split groups live.
  */
 
 export interface GroupEntry {
@@ -108,6 +109,22 @@ export interface HistoryMessage {
 	content?: unknown;
 }
 
+/** Tool-only assistant messages continue the previous group; anything else starts one. */
+export function startsGroup(message: HistoryMessage): boolean {
+	if (message.role === "user") return true;
+	if (message.role !== "assistant") return false;
+	return hasVisibleText(message);
+}
+
+function hasVisibleText(message: HistoryMessage): boolean {
+	if (!Array.isArray(message.content)) return false;
+	return message.content.some((part) => {
+		if (!part || typeof part !== "object") return false;
+		const block = part as { type?: string; text?: unknown };
+		return block.type === "text" && typeof block.text === "string" && block.text.trim() !== "";
+	});
+}
+
 interface ToolCallBlock {
 	type: string;
 	id?: unknown;
@@ -118,9 +135,8 @@ interface ToolCallBlock {
 export function prepareGroups(messages: readonly HistoryMessage[]): void {
 	resetGroups();
 	for (const message of messages) {
-		if (message.role !== "assistant") continue;
-		openGroup();
-		if (!Array.isArray(message.content)) continue;
+		if (startsGroup(message)) openGroup();
+		if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
 		for (const part of message.content as ToolCallBlock[]) {
 			if (part?.type !== "toolCall" || typeof part.id !== "string" || typeof part.name !== "string") continue;
 			registerCall(part.id, part.name, "", true);

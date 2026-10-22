@@ -32,6 +32,7 @@ test("summarizeArgs prefers the command, then a path", () => {
 	assert.equal(summarizeArgs({ path: "src/engine.ts", offset: 3 }), "src/engine.ts");
 	assert.equal(summarizeArgs({ file_path: "/tmp/a" }), "/tmp/a");
 	assert.equal(summarizeArgs(undefined), "");
+	assert.equal(summarizeArgs({}), "", "streaming args render as a bare tool name");
 });
 
 test("formatDuration keeps sub-second runs short", () => {

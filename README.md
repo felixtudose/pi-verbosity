@@ -46,13 +46,13 @@ one.
 
 ## Grouping
 
-In `minimal`, consecutive tool calls inside one assistant message collapse into a
-single transcript line: `⠇ 2 tools · bash, read` while they run, then
-`● 2 tools · bash, read · 1.4s` once they finish. Earlier rows of the group render
-with no height at all, so a ten-call turn costs one line instead of ten. A new
-assistant message (text between calls) starts a new group, and errors add one
-short `✗ tool: first line of the error` line. `ctrl+o` expands a row to the
-per-call lines with their output.
+In `minimal`, consecutive tool calls collapse into a single transcript line:
+`⠇ 2 tools · bash, read` while they run, then `● 2 tools · bash, read · 1.4s` once
+they finish. Earlier rows of the group render with no height at all, so a ten-call
+turn costs one line instead of ten, whether the model issued the calls in parallel
+or one after another — only prose or a new user message starts a new group. Errors
+add one short `✗ tool: first line of the error` line, and `ctrl+o` expands a row to
+the per-call lines with their output.
 
 ## What it changes in pi's settings
 
