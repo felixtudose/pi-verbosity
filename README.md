@@ -22,7 +22,7 @@ pi -e /path/to/pi-verbosity/index.ts
 
 | Level | Tool call | Tool result | Thinking |
 |---|---|---|---|
-| `minimal` | one line: tool name + command/path | hidden; still shown for errors or when you expand with `ctrl+o` | hidden |
+| `minimal` | one line per *group* of consecutive calls: `● bash ls` for a single call, `● 4 tools · bash×2, read · 1.8s` for a run | hidden; errors get one compact line, `ctrl+o` expands the row | hidden |
 | `normal` | pi default | pi default (truncated, `ctrl+o` expands) | your own setting, untouched |
 | `verbose` | always fully expanded | always fully expanded | shown |
 
@@ -39,8 +39,20 @@ pi -e /path/to/pi-verbosity/index.ts
 Aliases: `min`, `quiet` → `minimal`; `default` → `normal`; `full`, `loud` → `verbose`.
 While a non-default level is active, the footer shows `min` or `verbose`.
 
-The level is remembered in `<agent-dir>/verbosity.json` and applies to every
-session, including `pi -p` and RPC runs.
+The level is remembered in `<agent-dir>/verbosity.json`. Every session applies it
+on startup, including `pi -p` and RPC runs, and the transcript history is
+re-grouped from the session branch so a resumed session looks the same as a live
+one.
+
+## Grouping
+
+In `minimal`, consecutive tool calls inside one assistant message collapse into a
+single transcript line: `⠇ 2 tools · bash, read` while they run, then
+`● 2 tools · bash, read · 1.4s` once they finish. Earlier rows of the group render
+with no height at all, so a ten-call turn costs one line instead of ten. A new
+assistant message (text between calls) starts a new group, and errors add one
+short `✗ tool: first line of the error` line. `ctrl+o` expands a row to the
+per-call lines with their output.
 
 ## What it changes in pi's settings
 
@@ -50,6 +62,11 @@ the first level change is remembered and restored by `/verbosity normal`, so a
 round trip never leaves your settings different from where they started. The
 command rewrites the global settings file and then runs pi's own reload, which
 rebuilds the transcript so existing rows render at the new level.
+
+pi also draws a one-line italic `Thinking...` placeholder for every hidden thinking
+run. In `minimal` the extension blanks that label (`ctx.ui.setHiddenThinkingLabel("")`),
+which makes pi render no rows at all for hidden thinking; the other levels keep
+pi's placeholder.
 
 `normal` never writes to your settings on its own.
 

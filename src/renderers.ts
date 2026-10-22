@@ -1,16 +1,19 @@
 /**
  * Tool renderers for the `minimal` and `verbose` levels.
  *
- * Tool components pick their renderers once, when the tool call is created, so a
- * level change re-renders the transcript through `/reload` rather than mutating
- * components in place.
+ * `minimal` draws one line per group of consecutive tool calls (see `groups.ts`) and
+ * shows output only for errors or when the row is expanded. Tool components pick
+ * their renderers once, when the tool call is created, so a level change re-renders
+ * the transcript through `/reload` rather than mutating components in place.
  */
 import type { Theme, ToolRendererResolver, ToolRenderers } from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import type { VerbosityLevel } from "./levels.ts";
+import { entryFor, groupFor, groupStats, isLastInGroup, registerCall, settleCall, type ToolGroup } from "./groups.ts";
 
 const MAX_ARGUMENT_WIDTH = 200;
+const RUNNING_MARK = "⠇";
 
 /** Renders nothing, so a collapsed row keeps only its call line. */
 class EmptyComponent implements Component {
@@ -52,10 +55,73 @@ export function summarizeArgs(args: unknown): string {
 	return json.length > MAX_ARGUMENT_WIDTH ? `${json.slice(0, MAX_ARGUMENT_WIDTH)}…` : json;
 }
 
-export function formatCallLine(toolName: string, args: unknown, theme: Theme): string {
-	const summary = summarizeArgs(args);
-	const title = theme.fg("toolTitle", `● ${toolName}`);
+export function formatCallLine(toolName: string, summary: string, theme: Theme, running = false): string {
+	const title = theme.fg("toolTitle", `${running ? RUNNING_MARK : "●"} ${toolName}`);
 	return summary === "" ? title : `${title} ${theme.fg("muted", summary)}`;
+}
+
+export function formatDuration(ms: number): string {
+	if (ms < 1000) return `${Math.max(1, Math.round(ms))}ms`;
+	const seconds = ms / 1000;
+	if (seconds < 10) return `${seconds.toFixed(1)}s`;
+	if (seconds < 60) return `${Math.round(seconds)}s`;
+	return `${Math.floor(seconds / 60)}m ${String(Math.round(seconds % 60)).padStart(2, "0")}s`;
+}
+
+/** One line for a whole group: `● 4 tools · bash×2, read · 2.1s`. */
+export function groupLine(group: ToolGroup, theme: Theme): string {
+	const stats = groupStats(group);
+	if (stats.count === 1) {
+		const only = group.entries[0]!;
+		const errorMark = only.errorText !== undefined && !stats.running;
+		const mark = stats.running ? RUNNING_MARK : errorMark ? "✗" : "●";
+		const title = theme.fg(errorMark ? "error" : "toolTitle", `${mark} ${only.toolName}`);
+		return only.summary === "" ? title : `${title} ${theme.fg("muted", only.summary)}`;
+	}
+	const mark = stats.running ? RUNNING_MARK : stats.errorCount > 0 ? "✗" : "●";
+	const names = stats.names.map(({ name, count }) => (count > 1 ? `${name}×${count}` : name)).join(", ");
+	const parts = [`${mark} ${stats.count} tools`, names];
+	if (stats.durationMs !== undefined) parts.push(formatDuration(stats.durationMs));
+	return `${theme.fg(stats.errorCount > 0 && !stats.running ? "error" : "dim", parts.join(" · "))}`;
+}
+
+class GroupRow implements Component {
+	private readonly entryId: string;
+	private readonly expanded: boolean;
+	private readonly theme: Theme;
+	private readonly toolName: string;
+	private readonly summary: string;
+
+	constructor(entryId: string, toolName: string, summary: string, expanded: boolean, theme: Theme) {
+		this.entryId = entryId;
+		this.toolName = toolName;
+		this.summary = summary;
+		this.expanded = expanded;
+		this.theme = theme;
+	}
+
+	render(width: number): string[] {
+		// A reload can reset the registry while rows still hold their ids, so re-register
+		// rather than dropping the row from the transcript.
+		const entry = entryFor(this.entryId) ?? registerCall(this.entryId, this.toolName, this.summary);
+		const group = groupFor(this.entryId);
+		if (!group) return [];
+		if (this.expanded) {
+			return [truncateToWidth(formatCallLine(entry.toolName, entry.summary, this.theme), Math.max(1, width), "…")];
+		}
+		// Only the newest row of a group draws anything; the rest keep zero height, so a
+		// long run of calls stays one summary line with its errors underneath.
+		if (!isLastInGroup(this.entryId)) return [];
+		const lines = [truncateToWidth(groupLine(group, this.theme), Math.max(1, width), "…")];
+		for (const failed of group.entries) {
+			if (failed.errorText === undefined) continue;
+			const text = `  ${this.theme.fg("error", `✗ ${failed.toolName}: ${firstLine(failed.errorText)}`)}`;
+			lines.push(truncateToWidth(text, Math.max(1, width), "…"));
+		}
+		return lines;
+	}
+
+	invalidate(): void {}
 }
 
 /** Text of a tool result, used when no built-in renderer exists to fall back on. */
@@ -83,10 +149,17 @@ function expandedRenderers(builtIn: ToolRenderers): ToolRenderers {
 function minimalRenderers(toolName: string, builtIn: ToolRenderers | undefined): ToolRenderers {
 	return {
 		renderShell: "self",
-		renderCall: (args, theme) => new LineComponent(formatCallLine(toolName, args, theme)),
+		renderCall: (args, theme, context) => {
+			const summary = summarizeArgs(args);
+			const entry = registerCall(context.toolCallId, toolName, summary);
+			return new GroupRow(entry.id, toolName, summary, context.expanded, theme);
+		},
 		renderResult: (result, options, theme, context) => {
-			const showDetail = options.expanded || context.isError;
-			if (!showDetail) return new EmptyComponent();
+			const errorText = context.isError ? firstLine(resultText(result)) : undefined;
+			settleCall(context.toolCallId, context.durationMs, errorText);
+			// Collapsed rows draw their own one-line summary, including a compact error
+			// line, so nothing of the result body is repeated underneath.
+			if (!options.expanded) return new EmptyComponent();
 			if (builtIn?.renderResult) return builtIn.renderResult(result, { ...options, expanded: true }, theme, context);
 			const text = resultText(result);
 			return new LineComponent(text === "" ? "" : theme.fg("toolOutput", text));

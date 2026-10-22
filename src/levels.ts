@@ -8,7 +8,7 @@ export type VerbosityLevel = "minimal" | "normal" | "verbose";
 export const LEVELS: readonly VerbosityLevel[] = ["minimal", "normal", "verbose"];
 
 export const LEVEL_DESCRIPTIONS: Record<VerbosityLevel, string> = {
-	minimal: "tool calls only (no output), thinking hidden",
+	minimal: "one line per group of tool calls, thinking hidden",
 	normal: "pi defaults: truncated output you can expand",
 	verbose: "tool output always expanded, thinking shown",
 };
